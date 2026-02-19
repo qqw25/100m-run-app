@@ -169,14 +169,10 @@ function stopRun() {
   clearInterval(timerInterval);
   if (watchId) navigator.geolocation.clearWatch(watchId);
   document.getElementById("status").innerText = "측정 종료";
-  // 종료음 재생
-  document.getElementById("finishSound").play();
-  document.getElementById("startBtn").disabled = false;
-  document.getElementById("stopBtn").disabled = true;
-}
 </script>
 
 </body>
 </html>
+
 
 
