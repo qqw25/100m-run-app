@@ -17,7 +17,7 @@
     font-size: 30px;
     margin: 10px;
   }
-  input, button {
+  input, select, button {
     font-size: 18px;
     padding: 5px 10px;
     margin: 5px;
@@ -29,12 +29,23 @@
 <h1>🏃 달리기 측정기</h1>
 
 <div>
-  목표 거리(m): <input type="number" id="goalDistance" value="100" />
-  단위(m): <input type="number" id="unitDistance" value="10" />
+  목표 거리(m): 
+  <select id="goalDistance">
+    <option value="10">10m</option>
+    <option value="20">20m</option>
+    <option value="30">30m</option>
+    <option value="40">40m</option>
+    <option value="50">50m</option>
+    <option value="60">60m</option>
+    <option value="70">70m</option>
+    <option value="80">80m</option>
+    <option value="90">90m</option>
+    <option value="100" selected>100m</option>
+  </select>
 </div>
 
 <div id="timer">00.00</div>
-<div id="distance">거리: 0m</div>
+<div id="distance">달린 거리: 0m</div>
 <button id="startBtn" onclick="startCountdown()">시작</button>
 <button id="stopBtn" onclick="stopRun()" disabled>중간 멈춤</button>
 <p id="status"></p>
@@ -89,9 +100,9 @@ function getDistance(lat1, lon1, lat2, lon2) {
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.sin(dLon / 2) ** 2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -105,12 +116,12 @@ function startGPSWatch() {
   navigator.geolocation.getCurrentPosition(function(position) {
     startPosition = position.coords;
     totalDistance = 0;
+    document.getElementById("distance").innerText = "달린 거리: 0m";
   }, function(error) {
     alert("위치 정보를 가져오는데 실패했습니다.");
   }, { enableHighAccuracy: true });
 
   const goalDistance = parseFloat(document.getElementById("goalDistance").value);
-  const unitDistance = parseFloat(document.getElementById("unitDistance").value);
 
   watchId = navigator.geolocation.watchPosition(function(position) {
     let distance = getDistance(
@@ -120,11 +131,12 @@ function startGPSWatch() {
       position.coords.longitude
     );
 
-    // 단위 단위로 거리 표시
-    let unitsReached = Math.floor(distance / unitDistance) * unitDistance;
-    document.getElementById("distance").innerText = "거리: " + unitsReached + "m";
+    totalDistance = Math.floor(distance);
+    if (totalDistance > goalDistance) totalDistance = goalDistance;
 
-    if (distance >= goalDistance) {
+    document.getElementById("distance").innerText = "달린 거리: " + totalDistance + "m";
+
+    if (totalDistance >= goalDistance) {
       stopRun();
     }
   }, function(error) {
@@ -134,9 +146,7 @@ function startGPSWatch() {
 
 function stopRun() {
   clearInterval(timerInterval);
-  if (watchId) {
-    navigator.geolocation.clearWatch(watchId);
-  }
+  if (watchId) navigator.geolocation.clearWatch(watchId);
   document.getElementById("status").innerText = "측정 종료";
   document.getElementById("startBtn").disabled = false;
   document.getElementById("stopBtn").disabled = true;
