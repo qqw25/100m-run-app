@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>100m 달리기 측정기</title>
+<style>
+  body {
+    text-align: center;
+    font-family: Arial, sans-serif;
+    margin-top: 100px;
+  }
+  #timer {
+    font-size: 60px;
+    margin: 20px;
+  }
+  button {
+    font-size: 20px;
+    padding: 10px 20px;
+  }
+</style>
+</head>
+<body>
+
+<h1>🏃 100m 달리기</h1>
+<div id="timer">00.00</div>
+<button onclick="startCountdown()" id="startBtn">시작</button>
+<p id="status"></p>
+
+<script>
+let startTime;
+let timerInterval;
+let watchId;
+let startPosition;
+
+function formatTime(ms) {
+  // ms(밀리초)를 100분의 1초 단위로 바꿔서
+  // 01.00, 02.00, ... 형식으로 만듭니다.
+  const totalCentis = Math.floor(ms / 10); // 1센티초 = 10ms
+  const seconds = Math.floor(totalCentis / 100);
+  const centis = totalCentis % 100;
+  // seconds를 2자리 숫자 문자열로 맞추고 centis도 2자리 유지
+  const secStr = seconds < 10 ? "0" + seconds : seconds;
+  const centiStr = centis < 10 ? "0" + centis : centis;
+  return secStr + "." + centiStr;
+}
+
+function startCountdown() {
+  document.getElementById("status").innerText = "측정 준비 중...";
+  document.getElementById("startBtn").disabled = true;
+
+  let count = 3;
+  document.getElementById("timer").innerText = count;
+
+  let countdownInterval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      document.getElementById("timer").innerText = count;
+    } else {
+      clearInterval(countdownInterval);
+      startTimer();
+      startGPSWatch();
+      document.getElementById("status").innerText = "측정 중...";
+    }
+  }, 1000);
+}
+
+function startTimer() {
+  startTime = Date.now();
+  timerInterval = setInterval(() => {
+    let elapsed = Date.now() - startTime;
+    document.getElementById("timer").innerText = formatTime(elapsed);
+  }, 10);
+}
+
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // 지구 반경(m)
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function startGPSWatch() {
+  if (!navigator.geolocation) {
+    alert("GPS를 지원하지 않는 기기입니다.");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(function(position) {
+    startPosition = position.coords;
+  }, function(error) {
+    alert("위치 정보를 가져오는데 실패했습니다.");
+  }, { enableHighAccuracy: true });
+
+  watchId = navigator.geolocation.watchPosition(function(position) {
+    let distance = getDistance(
+      startPosition.latitude,
+      startPosition.longitude,
+      position.coords.latitude,
+      position.coords.longitude
+    );
+
+    if (distance >= 100) {
+      stopRun();
+    }
+  }, function(error) {
+    console.log("위치 정보 감시 오류:", error);
+  }, { enableHighAccuracy: true });
+}
+
+function stopRun() {
+  clearInterval(timerInterval);
+  if (watchId) {
+    navigator.geolocation.clearWatch(watchId);
+  }
+  document.getElementById("status").innerText = "완료! 100m 달성";
+  document.getElementById("startBtn").disabled = false;
+}
+</script>
+
+</body>
+</html>
