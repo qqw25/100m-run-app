@@ -2,28 +2,41 @@
 <html>
 <head>
 <meta charset="UTF-8" />
-<title>100m 달리기 측정기</title>
+<title>거리 측정 타이머</title>
 <style>
   body {
     text-align: center;
     font-family: Arial, sans-serif;
-    margin-top: 100px;
+    margin-top: 50px;
   }
   #timer {
     font-size: 60px;
     margin: 20px;
   }
-  button {
-    font-size: 20px;
-    padding: 10px 20px;
+  #distance {
+    font-size: 30px;
+    margin: 10px;
+  }
+  input, button {
+    font-size: 18px;
+    padding: 5px 10px;
+    margin: 5px;
   }
 </style>
 </head>
 <body>
 
-<h1>🏃 100m 달리기</h1>
+<h1>🏃 달리기 측정기</h1>
+
+<div>
+  목표 거리(m): <input type="number" id="goalDistance" value="100" />
+  단위(m): <input type="number" id="unitDistance" value="10" />
+</div>
+
 <div id="timer">00.00</div>
-<button onclick="startCountdown()" id="startBtn">시작</button>
+<div id="distance">거리: 0m</div>
+<button id="startBtn" onclick="startCountdown()">시작</button>
+<button id="stopBtn" onclick="stopRun()" disabled>중간 멈춤</button>
 <p id="status"></p>
 
 <script>
@@ -31,14 +44,12 @@ let startTime;
 let timerInterval;
 let watchId;
 let startPosition;
+let totalDistance = 0;
 
 function formatTime(ms) {
-  // ms(밀리초)를 100분의 1초 단위로 바꿔서
-  // 01.00, 02.00, ... 형식으로 만듭니다.
-  const totalCentis = Math.floor(ms / 10); // 1센티초 = 10ms
+  const totalCentis = Math.floor(ms / 10);
   const seconds = Math.floor(totalCentis / 100);
   const centis = totalCentis % 100;
-  // seconds를 2자리 숫자 문자열로 맞추고 centis도 2자리 유지
   const secStr = seconds < 10 ? "0" + seconds : seconds;
   const centiStr = centis < 10 ? "0" + centis : centis;
   return secStr + "." + centiStr;
@@ -60,6 +71,7 @@ function startCountdown() {
       startTimer();
       startGPSWatch();
       document.getElementById("status").innerText = "측정 중...";
+      document.getElementById("stopBtn").disabled = false;
     }
   }, 1000);
 }
@@ -73,7 +85,7 @@ function startTimer() {
 }
 
 function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371000; // 지구 반경(m)
+  const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
@@ -92,9 +104,13 @@ function startGPSWatch() {
 
   navigator.geolocation.getCurrentPosition(function(position) {
     startPosition = position.coords;
+    totalDistance = 0;
   }, function(error) {
     alert("위치 정보를 가져오는데 실패했습니다.");
   }, { enableHighAccuracy: true });
+
+  const goalDistance = parseFloat(document.getElementById("goalDistance").value);
+  const unitDistance = parseFloat(document.getElementById("unitDistance").value);
 
   watchId = navigator.geolocation.watchPosition(function(position) {
     let distance = getDistance(
@@ -104,7 +120,11 @@ function startGPSWatch() {
       position.coords.longitude
     );
 
-    if (distance >= 100) {
+    // 단위 단위로 거리 표시
+    let unitsReached = Math.floor(distance / unitDistance) * unitDistance;
+    document.getElementById("distance").innerText = "거리: " + unitsReached + "m";
+
+    if (distance >= goalDistance) {
       stopRun();
     }
   }, function(error) {
@@ -117,8 +137,9 @@ function stopRun() {
   if (watchId) {
     navigator.geolocation.clearWatch(watchId);
   }
-  document.getElementById("status").innerText = "완료! 100m 달성";
+  document.getElementById("status").innerText = "측정 종료";
   document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
 }
 </script>
 
