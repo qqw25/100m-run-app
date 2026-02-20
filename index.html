@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8" />
-<title>거리 측정 타이머 (GPS + 사운드)</title>
+<title>거리 측정 타이머 (고정밀 GPS)</title>
 <style>
   body {
     text-align: center;
@@ -33,7 +33,7 @@
 </head>
 <body>
 
-<h1>🏃 달리기 측정기</h1>
+<h1>🏃 달리기 측정기 (고정밀)</h1>
 
 <div>
   목표 거리(m): 
@@ -50,21 +50,21 @@
 <div id="timer">00.00</div>
 <div id="distance">달린 거리: 0m</div>
 
-<button id="startBtn" onclick="startCountdown()">시작</button>
+<button id="startBtn" onclick="startCountdown()" disabled>시작</button>
 <button id="stopBtn" onclick="stopRun()" disabled>중단</button>
-<p id="status"></p>
+<p id="status">GPS 준비 중...</p>
 
-<!-- 시작/종료 사운드 -->
 <audio id="startSound" src="start.mp3"></audio>
-<audio id="finishSound" src="finish.mp3"></audio>
 
 <script>
 let startTime;
 let timerInterval;
 let watchId;
-let startPosition;
 let prevPosition;
 let totalDistance = 0;
+
+let gpsReady = false;
+let stableStartPositionData = null;
 
 function formatTime(ms) {
   const totalCentis = Math.floor(ms / 10);
@@ -84,53 +84,75 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-// GPS 초기 위치 안정화
+// GPS 안정화
 function getStableStartPosition(callback) {
   let attempts = 0;
   let positions = [];
+
   const checkPosition = () => {
     navigator.geolocation.getCurrentPosition(function(pos) {
-      if (pos.coords.accuracy > 15) { setTimeout(checkPosition, 500); return; }
+      if (pos.coords.accuracy > 15) {
+        setTimeout(checkPosition, 500);
+        return;
+      }
+
       positions.push(pos.coords);
       attempts++;
-      if (attempts < 5) { setTimeout(checkPosition, 500); }
-      else {
+
+      if (attempts < 5) {
+        setTimeout(checkPosition, 500);
+      } else {
         let latSum=0, lonSum=0;
-        positions.forEach(p => { latSum += p.latitude; lonSum += p.longitude; });
-        callback({ latitude: latSum/positions.length, longitude: lonSum/positions.length });
+        positions.forEach(p => {
+          latSum += p.latitude;
+          lonSum += p.longitude;
+        });
+
+        callback({
+          latitude: latSum/positions.length,
+          longitude: lonSum/positions.length
+        });
       }
-    }, function(error) { alert("위치 정보 불러오기 실패"); }, { enableHighAccuracy: true });
+    }, null, { enableHighAccuracy: true });
   };
+
   checkPosition();
 }
 
+window.onload = function() {
+  getStableStartPosition(function(stablePos) {
+    stableStartPositionData = stablePos;
+    gpsReady = true;
+    document.getElementById("status").innerText = "준비 완료";
+    document.getElementById("startBtn").disabled = false;
+  });
+};
+
 function startCountdown() {
-  document.getElementById("status").innerText = "GPS 안정화 중...";
+  if (!gpsReady) return;
+
+  prevPosition = stableStartPositionData;
+  totalDistance = 0;
+
+  document.getElementById("distance").innerText = "달린 거리: 0m";
   document.getElementById("startBtn").disabled = true;
 
-  getStableStartPosition(function(stablePos) {
-    startPosition = stablePos;
-    prevPosition = stablePos;
-    totalDistance = 0;
-    document.getElementById("distance").innerText = "달린 거리: 0m";
-    document.getElementById("status").innerText = "측정 준비 완료";
+  let count = 3;
+  document.getElementById("timer").innerText = count;
 
-    let count = 3;
-    document.getElementById("timer").innerText = count;
-    let countdownInterval = setInterval(() => {
-      count--;
-      if (count > 0) document.getElementById("timer").innerText = count;
-      else {
-        clearInterval(countdownInterval);
-        // 시작음 재생
-        document.getElementById("startSound").play();
-        startTimer();
-        startGPSWatch();
-        document.getElementById("status").innerText = "측정 중...";
-        document.getElementById("stopBtn").disabled = false;
-      }
-    }, 1000);
-  });
+  let countdownInterval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      document.getElementById("timer").innerText = count;
+    } else {
+      clearInterval(countdownInterval);
+      document.getElementById("startSound").play();
+      startTimer();
+      startGPSWatch();
+      document.getElementById("status").innerText = "측정 중...";
+      document.getElementById("stopBtn").disabled = false;
+    }
+  }, 1000);
 }
 
 function startTimer() {
@@ -141,38 +163,81 @@ function startTimer() {
   }, 10);
 }
 
+// 🔥 고정밀 GPS 추적
 function startGPSWatch() {
-  if (!navigator.geolocation) { alert("GPS를 지원하지 않는 기기입니다."); return; }
   const goalDistance = parseFloat(document.getElementById("goalDistance").value);
+
+  let positionHistory = [];
+  const MAX_JUMP = 3;     
+  const MAX_SPEED = 12;   
+
   watchId = navigator.geolocation.watchPosition(function(position) {
-    if (position.coords.accuracy > 15) return; // 정확도 낮으면 무시
+
+    if (position.coords.accuracy > 10) return;
+
+    const newPos = {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      timestamp: position.timestamp
+    };
+
+    positionHistory.push(newPos);
+    if (positionHistory.length > 5) positionHistory.shift();
+
+    let avgLat = 0;
+    let avgLon = 0;
+
+    positionHistory.forEach(p => {
+      avgLat += p.latitude;
+      avgLon += p.longitude;
+    });
+
+    avgLat /= positionHistory.length;
+    avgLon /= positionHistory.length;
 
     let distance = getDistance(
       prevPosition.latitude,
       prevPosition.longitude,
-      position.coords.latitude,
-      position.coords.longitude
+      avgLat,
+      avgLon
     );
 
-    if (distance < 1) distance = 0; // 튀김 방지
+    let timeDiff = (newPos.timestamp - startTime) / 1000;
+    let speed = distance / (timeDiff || 1);
+
+    if (distance > MAX_JUMP) return;
+    if (speed > MAX_SPEED) return;
+    if (distance < 0.5) distance = 0;
+
     totalDistance += distance;
     if (totalDistance > goalDistance) totalDistance = goalDistance;
 
-    prevPosition = position.coords;
-    document.getElementById("distance").innerText = "달린 거리: " + Math.floor(totalDistance) + "m";
+    prevPosition = {
+      latitude: avgLat,
+      longitude: avgLon
+    };
+
+    document.getElementById("distance").innerText =
+      "달린 거리: " + Math.floor(totalDistance) + "m";
 
     if (totalDistance >= goalDistance) stopRun();
-  }, function(error) { console.log("GPS 감시 오류:", error); }, { enableHighAccuracy: true });
+
+  }, null, {
+    enableHighAccuracy: true,
+    maximumAge: 0,
+    timeout: 5000
+  });
 }
 
 function stopRun() {
   clearInterval(timerInterval);
   if (watchId) navigator.geolocation.clearWatch(watchId);
+
   document.getElementById("status").innerText = "측정 종료";
+  document.getElementById("stopBtn").disabled = true;
+  document.getElementById("startBtn").disabled = false;
+}
 </script>
 
 </body>
 </html>
-
-
-
